@@ -75,7 +75,6 @@
             id="audioUrl" 
             value="http://cld-games3store-g60-10021.s3v2.nie.netease.com/20251109/game_10021/cc_audio_server/f63954a5-fc4f-4768-9ba4-af78882b26af?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20251102T081635Z&X-Amz-SignedHeaders=host&X-Amz-Expires=604799&X-Amz-Credential=CWIA3R2W8DVABATD7EHD%2F20251102%2F%2Fs3%2Faws4_request&X-Amz-Signature=c34fd6b02a93b80bb4c873e2eca38182f4f09356619c2dba5f6c6209f6efa033" 
             class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            readonly
           >
           <button 
             id="copyBtn" 
@@ -199,7 +198,7 @@
           
           <div class="text-sm text-slate-500 italic">
             <i class="fa fa-info-circle mr-1"></i>
-            提示：需先<a href="https://ai.baidu.com/" target="_blank" class="text-primary hover:underline">注册百度智能云</a>获取API Key和Secret Key，替换代码中对应位置后使用
+            百度智能云ASR配置信息：AppID=120657125，已自动填入最新密钥，点击"开始转换"即可使用
           </div>
         </div>
       </section>
@@ -244,6 +243,29 @@
       if (i === 1) option.selected = true;
       speedSelect.appendChild(option);
     }
+    
+    // 监听音频链接输入框变化，同步更新播放器源
+    audioUrlInput.addEventListener('input', () => {
+      // 更新音频播放器的链接
+      audioPlayer.src = audioUrlInput.value;
+      // 重新加载音频元数据
+      audioPlayer.load();
+      // 重置播放按钮和进度条
+      playPauseBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
+      progressBar.style.width = '0%';
+      bufferBar.style.width = '0%';
+      currentTimeEl.textContent = '00:00';
+      durationEl.textContent = '00:00';
+      
+      // 添加链接更新提示
+      const updateAlert = document.createElement('div');
+      updateAlert.className = 'mt-3 text-sm';
+      updateAlert.innerHTML = '<span class="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400">音频链接已更新，请点击播放按钮</span>';
+      // 插入到复制提示下方
+      copyAlert.after(updateAlert);
+      // 3秒后自动移除提示
+      setTimeout(() => updateAlert.remove(), 3000);
+    });
     
     // 复制链接功能
     copyBtn.addEventListener('click', () => {
@@ -381,9 +403,10 @@
     let isAsrActive = false;
     let baiduAccessToken = null; // 存储百度API的Access Token
     
-    // 替换为你在百度智能云申请的API Key和Secret Key
-    const BAIDU_API_KEY = '你的API Key';
-    const BAIDU_SECRET_KEY = '你的Secret Key';
+    // 百度智能云ASR配置信息
+    const BAIDU_APP_ID = '120657125';
+    const BAIDU_API_KEY = 'ChGkXxbZLSk1osaRNpRbixxR';
+    const BAIDU_SECRET_KEY = '6ktcmDIlIynvQ9XGgG8DmlZqpqXROhgQ';
     
     startAsrBtn.addEventListener('click', startASR);
     stopAsrBtn.addEventListener('click', stopASR);
@@ -406,12 +429,24 @@
       // 获取百度ASR的Access Token
       if (!baiduAccessToken) {
         try {
-          const tokenResponse = await fetch(`https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${BAIDU_API_KEY}&client_secret=${BAIDU_SECRET_KEY}`);
+          const tokenUrl = `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${encodeURIComponent(BAIDU_API_KEY)}&client_secret=${encodeURIComponent(BAIDU_SECRET_KEY)}`;
+          const tokenResponse = await fetch(tokenUrl);
+          
+          if (!tokenResponse.ok) {
+            throw new Error(`Token请求失败，状态码: ${tokenResponse.status}`);
+          }
+          
           const tokenData = await tokenResponse.json();
+          
+          if (tokenData.error) {
+            throw new Error(`Token获取失败: ${tokenData.error_description || tokenData.error}`);
+          }
+          
           baiduAccessToken = tokenData.access_token;
+          asrResult.value += '[已获取识别权限，开始转换...]\n';
         } catch (err) {
           console.error('获取百度Token失败:', err);
-          asrResult.value += `[错误：请检查API Key和Secret Key是否正确]\n`;
+          asrResult.value += `[错误：${err.message}，请检查API密钥是否正确或网络连接]\n`;
           stopASR();
           return;
         }
@@ -426,40 +461,66 @@
       
       const audioUrl = audioUrlInput.value;
       try {
-        // 下载音频文件
-        const audioResponse = await fetch(audioUrl);
+        // 下载音频文件（带超时控制）
+        const audioResponse = await Promise.race([
+          fetch(audioUrl),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('音频下载超时')), 10000))
+        ]);
+        
+        if (!audioResponse.ok) {
+          throw new Error(`音频下载失败，状态码: ${audioResponse.status}`);
+        }
+        
         const audioBlob = await audioResponse.blob();
         
         // 构建FormData发送到百度ASR
         const formData = new FormData();
-        formData.append('format', 'mp3'); // 需与音频格式匹配，可根据实际调整
-        formData.append('rate', '16000'); // 采样率，需与音频匹配
-        formData.append('channel', '1'); // 单声道
-        formData.append('cuid', 'audio-player-asr'); // 自定义设备标识
+        formData.append('format', 'mp3');
+        formData.append('rate', '16000');
+        formData.append('channel', '1');
+        formData.append('cuid', `audio-player-${BAIDU_APP_ID}`);
         formData.append('token', baiduAccessToken);
         formData.append('speech', audioBlob);
+        formData.append('len', audioBlob.size);
         
-        const asrResponse = await fetch('https://vop.baidu.com/server_api', {
-          method: 'POST',
-          body: formData
-        });
+        // 发送识别请求（带超时控制）
+        const asrResponse = await Promise.race([
+          fetch('https://vop.baidu.com/server_api', {
+            method: 'POST',
+            body: formData
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('识别请求超时')), 15000))
+        ]);
         
         const asrData = await asrResponse.json();
+        
         if (asrData.err_no === 0) {
           asrResult.value += `${asrData.result.join('')}\n`;
         } else {
-          asrResult.value += `[识别错误: ${asrData.err_msg}]\n`;
+          // 错误码对应说明
+          const errorMap = {
+            3300: '输入参数不正确',
+            3301: '音频格式错误',
+            3302: '语音识别失败',
+            3303: '权限不足（未开通服务或额度用尽）',
+            3304: '语音过长（超过60秒）',
+            3305: '请求过于频繁',
+            3307: '密钥无效（可能已过期）',
+            3308: '服务暂时不可用'
+          };
+          const errorMsg = errorMap[asrData.err_no] || asrData.err_msg;
+          asrResult.value += `[识别错误: ${errorMsg}（错误码：${asrData.err_no}）]\n`;
         }
       } catch (err) {
         console.error('ASR请求错误:', err);
-        asrResult.value += `[请求失败: ${err.message}，正在重试...]\n`;
+        asrResult.value += `[请求失败: ${err.message}，3秒后重试...]\n`;
         setTimeout(fetchASRResult, 3000);
         return;
       }
       
       asrResult.scrollTop = asrResult.scrollHeight;
       if (!audioPlayer.ended) {
-        // 动态调整请求间隔（根据播放速度）
+        // 根据播放速度动态调整请求间隔
         const interval = Math.max(1000, 3000 / audioPlayer.playbackRate);
         setTimeout(fetchASRResult, interval);
       }
