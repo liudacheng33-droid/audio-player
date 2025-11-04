@@ -16,7 +16,8 @@
             primary: '#3B82F6',
             secondary: '#10B981',
             dark: '#1E293B',
-            light: '#F8FAFC'
+            light: '#F8FAFC',
+            warning: '#EF4444'
           },
           fontFamily: {
             inter: ['Inter', 'system-ui', 'sans-serif'],
@@ -45,7 +46,12 @@
 </head>
 
 <body class="font-inter bg-gradient-to-br from-slate-900 to-indigo-950 text-light min-h-screen p-4 md:p-8">
-  <div class="max-w-5xl mx-auto">
+  <!-- 保密提示横幅 -->
+  <div class="fixed top-0 left-0 right-0 bg-warning/90 text-white text-center py-2 z-50">
+    <p class="font-medium">内部信息严格保密，禁止外传给部门外使用</p>
+  </div>
+
+  <div class="max-w-5xl mx-auto pt-12">
     <!-- 标题区域 -->
     <header class="text-center mb-8 md:mb-12">
       <h1 class="text-[clamp(1.8rem,5vw,3rem)] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">
@@ -193,7 +199,7 @@
           
           <div class="text-sm text-slate-500 italic">
             <i class="fa fa-info-circle mr-1"></i>
-            提示：点击"开始转换"后，系统将调用PaddleSpeech识别音频内容并实时显示文字
+            提示：需先<a href="https://ai.baidu.com/" target="_blank" class="text-primary hover:underline">注册百度智能云</a>获取API Key和Secret Key，替换代码中对应位置后使用
           </div>
         </div>
       </section>
@@ -201,7 +207,7 @@
     
     <!-- 页脚 -->
     <footer class="mt-12 text-center text-slate-500 text-sm">
-      <p>© 2025 音频播放器与语音转文字工具 | 基于PaddleSpeech实现</p>
+      <p>© 2025 音频播放器与语音转文字工具 | 基于百度智能云ASR实现</p>
     </footer>
   </div>
 
@@ -371,22 +377,19 @@
       }
     });
     
-    // 语音转文字功能（PaddleSpeech实现）
+    // 语音转文字功能（百度智能云ASR实现）
     let isAsrActive = false;
-    let asrRequest = null; // 用于取消未完成的请求
+    let baiduAccessToken = null; // 存储百度API的Access Token
+    
+    // 替换为你在百度智能云申请的API Key和Secret Key
+    const BAIDU_API_KEY = '你的API Key';
+    const BAIDU_SECRET_KEY = '你的Secret Key';
     
     startAsrBtn.addEventListener('click', startASR);
     stopAsrBtn.addEventListener('click', stopASR);
     clearAsrBtn.addEventListener('click', clearASR);
     
-    function startASR() {
-      // 验证后端服务是否可用
-      fetch('http://localhost:5000/asr', { method: 'OPTIONS' })
-        .catch(err => {
-          alert('无法连接到语音识别服务，请确保后端服务已启动');
-          return;
-        });
-      
+    async function startASR() {
       if (audioPlayer.paused) {
         togglePlayPause(); // 如果音频没在播放，先开始播放
       }
@@ -400,72 +403,70 @@
       asrResult.value += '[开始语音识别...]\n';
       asrResult.scrollTop = asrResult.scrollHeight;
       
+      // 获取百度ASR的Access Token
+      if (!baiduAccessToken) {
+        try {
+          const tokenResponse = await fetch(`https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${BAIDU_API_KEY}&client_secret=${BAIDU_SECRET_KEY}`);
+          const tokenData = await tokenResponse.json();
+          baiduAccessToken = tokenData.access_token;
+        } catch (err) {
+          console.error('获取百度Token失败:', err);
+          asrResult.value += `[错误：请检查API Key和Secret Key是否正确]\n`;
+          stopASR();
+          return;
+        }
+      }
+      
       // 开始识别流程
       fetchASRResult();
     }
     
-    function fetchASRResult() {
+    async function fetchASRResult() {
       if (!isAsrActive) return;
       
-      // 构建请求参数（包含当前音频URL和播放进度）
-      const requestData = {
-        audio_url: audioUrlInput.value,
-        current_time: audioPlayer.currentTime // 可选：用于后端实现分段识别
-      };
-      
-      // 发送请求到后端ASR服务
-      asrRequest = fetch('http://localhost:5000/asr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestData)
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`服务响应错误: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        if (!isAsrActive) return; // 如果已停止，不再处理结果
+      const audioUrl = audioUrlInput.value;
+      try {
+        // 下载音频文件
+        const audioResponse = await fetch(audioUrl);
+        const audioBlob = await audioResponse.blob();
         
-        if (data.error) {
-          asrResult.value += `[识别错误: ${data.error}]\n`;
-        } else if (data.text) {
-          asrResult.value += `${data.text}\n`;
+        // 构建FormData发送到百度ASR
+        const formData = new FormData();
+        formData.append('format', 'mp3'); // 需与音频格式匹配，可根据实际调整
+        formData.append('rate', '16000'); // 采样率，需与音频匹配
+        formData.append('channel', '1'); // 单声道
+        formData.append('cuid', 'audio-player-asr'); // 自定义设备标识
+        formData.append('token', baiduAccessToken);
+        formData.append('speech', audioBlob);
+        
+        const asrResponse = await fetch('https://vop.baidu.com/server_api', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const asrData = await asrResponse.json();
+        if (asrData.err_no === 0) {
+          asrResult.value += `${asrData.result.join('')}\n`;
         } else {
-          asrResult.value += '[未识别到有效语音]\n';
+          asrResult.value += `[识别错误: ${asrData.err_msg}]\n`;
         }
-        
-        asrResult.scrollTop = asrResult.scrollHeight; // 自动滚动到底部
-        
-        // 继续识别（根据音频播放状态决定是否继续）
-        if (!audioPlayer.ended) {
-          // 动态调整请求间隔（根据播放速度）
-          const interval = Math.max(1000, 3000 / audioPlayer.playbackRate);
-          setTimeout(fetchASRResult, interval);
-        }
-      })
-      .catch(error => {
-        if (!isAsrActive) return;
-        
-        console.error('ASR请求错误:', error);
-        asrResult.value += `[请求失败: ${error.message}，正在重试...]\n`;
-        asrResult.scrollTop = asrResult.scrollHeight;
-        
-        // 错误重试
+      } catch (err) {
+        console.error('ASR请求错误:', err);
+        asrResult.value += `[请求失败: ${err.message}，正在重试...]\n`;
         setTimeout(fetchASRResult, 3000);
-      });
+        return;
+      }
+      
+      asrResult.scrollTop = asrResult.scrollHeight;
+      if (!audioPlayer.ended) {
+        // 动态调整请求间隔（根据播放速度）
+        const interval = Math.max(1000, 3000 / audioPlayer.playbackRate);
+        setTimeout(fetchASRResult, interval);
+      }
     }
     
     function stopASR() {
       isAsrActive = false;
-      // 取消未完成的请求
-      if (asrRequest) {
-        asrRequest.then(() => {}).catch(() => {}); // 忽略取消后的错误
-      }
-      
       asrStatus.classList.add('hidden');
       startAsrBtn.disabled = false;
       stopAsrBtn.disabled = true;
