@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高级音频播放器 | 语音转文字</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  
+  <!-- 配置Tailwind自定义主题 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3B82F6',
+            secondary: '#10B981',
+            dark: '#1E293B',
+            light: '#F8FAFC'
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .glass-effect {
+        @apply bg-white/10 backdrop-blur-md border border-white/20;
+      }
+      .slider-thumb {
+        @apply appearance-none w-4 h-4 rounded-full bg-primary cursor-pointer;
+      }
+      .animate-pulse-slow {
+        animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-gradient-to-br from-slate-900 to-indigo-950 text-light min-h-screen p-4 md:p-8">
+  <div class="max-w-5xl mx-auto">
+    <!-- 标题区域 -->
+    <header class="text-center mb-8 md:mb-12">
+      <h1 class="text-[clamp(1.8rem,5vw,3rem)] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">
+        音频播放器与语音转文字
+      </h1>
+      <p class="text-slate-400 max-w-2xl mx-auto">
+        播放指定音频，调整播放速度（1-32倍），并实时将语音转换为文字
+      </p>
+    </header>
+    
+    <!-- 主内容区域 -->
+    <main class="space-y-8">
+      <!-- 音频链接复制区域 -->
+      <section class="glass-effect rounded-xl p-6 shadow-xl">
+        <h2 class="text-xl font-semibold mb-4 flex items-center">
+          <i class="fa fa-link text-primary mr-2"></i>音频链接
+        </h2>
+        <div class="flex flex-col md:flex-row gap-3">
+          <input 
+            type="text" 
+            id="audioUrl" 
+            value="http://cld-games3store-g60-10021.s3v2.nie.netease.com/20251109/game_10021/cc_audio_server/f63954a5-fc4f-4768-9ba4-af78882b26af?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20251102T081635Z&X-Amz-SignedHeaders=host&X-Amz-Expires=604799&X-Amz-Credential=CWIA3R2W8DVABATD7EHD%2F20251102%2F%2Fs3%2Faws4_request&X-Amz-Signature=c34fd6b02a93b80bb4c873e2eca38182f4f09356619c2dba5f6c6209f6efa033" 
+            class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            readonly
+          >
+          <button 
+            id="copyBtn" 
+            class="bg-primary hover:bg-primary/80 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
+          >
+            <i class="fa fa-copy"></i>
+            <span>复制链接</span>
+          </button>
+        </div>
+        <div id="copyAlert" class="mt-3 text-sm hidden">
+          <span class="inline-block px-3 py-1 rounded-full bg-green-500/20 text-green-400">链接已复制到剪贴板</span>
+        </div>
+      </section>
+      
+      <!-- 音频播放器区域 -->
+      <section class="glass-effect rounded-xl p-6 shadow-xl">
+        <h2 class="text-xl font-semibold mb-4 flex items-center">
+          <i class="fa fa-play-circle text-primary mr-2"></i>音频播放控制
+        </h2>
+        
+        <!-- 音频元素（隐藏原生控件） -->
+        <audio id="audioPlayer" src="" class="hidden"></audio>
+        
+        <!-- 自定义播放器控件 -->
+        <div class="space-y-6">
+          <!-- 播放/暂停按钮 -->
+          <div class="flex justify-center">
+            <button 
+              id="playPauseBtn" 
+              class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary hover:bg-primary/80 text-white flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-primary/30 hover:scale-105"
+            >
+              <i class="fa fa-play text-2xl md:text-3xl"></i>
+            </button>
+          </div>
+          
+          <!-- 进度条 -->
+          <div class="space-y-2">
+            <div class="flex justify-between text-sm text-slate-400">
+              <span id="currentTime">00:00</span>
+              <span id="duration">00:00</span>
+            </div>
+            <div class="relative h-2 bg-slate-700 rounded-full overflow-hidden cursor-pointer" id="progressContainer">
+              <div id="progressBar" class="absolute top-0 left-0 h-full bg-primary transition-all duration-150"></div>
+              <div id="bufferBar" class="absolute top-0 left-0 h-full bg-primary/30"></div>
+            </div>
+          </div>
+          
+          <!-- 音量控制 -->
+          <div class="flex items-center gap-3">
+            <i class="fa fa-volume-up text-slate-400" id="volumeIcon"></i>
+            <input 
+              type="range" 
+              id="volumeSlider" 
+              min="0" 
+              max="1" 
+              step="0.05" 
+              value="1" 
+              class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+            >
+          </div>
+          
+          <!-- 倍速选择 -->
+          <div class="flex items-center gap-3">
+            <i class="fa fa-tachometer text-slate-400"></i>
+            <label for="speedSelect" class="text-sm text-slate-400 whitespace-nowrap">播放速度:</label>
+            <select 
+              id="speedSelect" 
+              class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <!-- 生成1到32倍速的选项 -->
+            </select>
+            <span id="currentSpeedDisplay" class="text-sm bg-slate-800/50 px-3 py-1 rounded-lg">1x</span>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 语音转文字区域 -->
+      <section class="glass-effect rounded-xl p-6 shadow-xl">
+        <h2 class="text-xl font-semibold mb-4 flex items-center">
+          <i class="fa fa-microphone text-primary mr-2"></i>语音转文字 (ASR)
+        </h2>
+        
+        <div class="space-y-4">
+          <div class="flex flex-wrap gap-3">
+            <button 
+              id="startAsrBtn" 
+              class="bg-secondary hover:bg-secondary/80 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
+            >
+              <i class="fa fa-play"></i>
+              <span>开始转换</span>
+            </button>
+            <button 
+              id="stopAsrBtn" 
+              class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
+              disabled
+            >
+              <i class="fa fa-stop"></i>
+              <span>停止转换</span>
+            </button>
+            <button 
+              id="clearAsrBtn" 
+              class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
+            >
+              <i class="fa fa-trash"></i>
+              <span>清空文本</span>
+            </button>
+          </div>
+          
+          <div class="relative">
+            <div id="asrStatus" class="hidden absolute top-3 right-3 text-sm px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 flex items-center gap-1">
+              <i class="fa fa-circle-o-notch fa-spin"></i>
+              <span>正在转换...</span>
+            </div>
+            <textarea 
+              id="asrResult" 
+              placeholder="语音转换的文字将显示在这里..." 
+              class="w-full h-48 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+              readonly
+            ></textarea>
+          </div>
+          
+          <div class="text-sm text-slate-500 italic">
+            <i class="fa fa-info-circle mr-1"></i>
+            提示：点击"开始转换"后，系统将调用PaddleSpeech识别音频内容并实时显示文字
+          </div>
+        </div>
+      </section>
+    </main>
+    
+    <!-- 页脚 -->
+    <footer class="mt-12 text-center text-slate-500 text-sm">
+      <p>© 2025 音频播放器与语音转文字工具 | 基于PaddleSpeech实现</p>
+    </footer>
+  </div>
+
+  <script>
+    // DOM元素引用
+    const audioUrlInput = document.getElementById('audioUrl');
+    const copyBtn = document.getElementById('copyBtn');
+    const copyAlert = document.getElementById('copyAlert');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const bufferBar = document.getElementById('bufferBar');
+    const currentTimeEl = document.getElementById('currentTime');
+    const durationEl = document.getElementById('duration');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeIcon = document.getElementById('volumeIcon');
+    const speedSelect = document.getElementById('speedSelect');
+    const currentSpeedDisplay = document.getElementById('currentSpeedDisplay');
+    const startAsrBtn = document.getElementById('startAsrBtn');
+    const stopAsrBtn = document.getElementById('stopAsrBtn');
+    const clearAsrBtn = document.getElementById('clearAsrBtn');
+    const asrResult = document.getElementById('asrResult');
+    const asrStatus = document.getElementById('asrStatus');
+    
+    // 初始化音频URL
+    audioPlayer.src = audioUrlInput.value;
+    
+    // 生成1到32倍速的选项
+    for (let i = 1; i <= 32; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = `${i}x`;
+      if (i === 1) option.selected = true;
+      speedSelect.appendChild(option);
+    }
+    
+    // 复制链接功能
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(audioUrlInput.value)
+        .then(() => {
+          copyAlert.classList.remove('hidden');
+          copyAlert.classList.add('animate-pulse-slow');
+          
+          setTimeout(() => {
+            copyAlert.classList.add('hidden');
+            copyAlert.classList.remove('animate-pulse-slow');
+          }, 2000);
+        })
+        .catch(err => {
+          console.error('无法复制文本: ', err);
+          alert('复制失败，请手动复制链接');
+        });
+    });
+    
+    // 播放/暂停功能
+    playPauseBtn.addEventListener('click', togglePlayPause);
+    
+    function togglePlayPause() {
+      if (audioPlayer.paused || audioPlayer.ended) {
+        audioPlayer.play()
+          .then(() => {
+            playPauseBtn.innerHTML = '<i class="fa fa-pause text-2xl md:text-3xl"></i>';
+          })
+          .catch(err => {
+            console.error('播放失败:', err);
+            alert('播放失败，请检查音频链接是否有效');
+          });
+      } else {
+        audioPlayer.pause();
+        playPauseBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
+      }
+    }
+    
+    // 更新进度条
+    audioPlayer.addEventListener('timeupdate', updateProgress);
+    
+    function updateProgress() {
+      const { currentTime, duration, buffered } = audioPlayer;
+      
+      // 更新进度条
+      if (duration) {
+        const progress = (currentTime / duration) * 100;
+        progressBar.style.width = `${progress}%`;
+      }
+      
+      // 更新缓冲进度
+      if (buffered.length > 0) {
+        const bufferedEnd = buffered.end(buffered.length - 1);
+        const duration = audioPlayer.duration;
+        if (duration > 0) {
+          const bufferedPercent = (bufferedEnd / duration) * 100;
+          bufferBar.style.width = `${bufferedPercent}%`;
+        }
+      }
+      
+      // 更新时间显示
+      currentTimeEl.textContent = formatTime(currentTime);
+      if (duration) {
+        durationEl.textContent = formatTime(duration);
+      }
+    }
+    
+    // 格式化时间为 MM:SS 格式
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // 点击进度条跳转播放位置
+    progressContainer.addEventListener('click', seek);
+    
+    function seek(e) {
+      const rect = progressContainer.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      audioPlayer.currentTime = pos * audioPlayer.duration;
+    }
+    
+    // 音量控制
+    volumeSlider.addEventListener('input', adjustVolume);
+    
+    function adjustVolume() {
+      audioPlayer.volume = volumeSlider.value;
+      updateVolumeIcon();
+    }
+    
+    function updateVolumeIcon() {
+      const volume = audioPlayer.volume;
+      if (volume === 0) {
+        volumeIcon.className = 'fa fa-volume-off text-slate-400';
+      } else if (volume < 0.5) {
+        volumeIcon.className = 'fa fa-volume-down text-slate-400';
+      } else {
+        volumeIcon.className = 'fa fa-volume-up text-slate-400';
+      }
+    }
+    
+    // 静音切换
+    volumeIcon.addEventListener('click', toggleMute);
+    
+    function toggleMute() {
+      audioPlayer.muted = !audioPlayer.muted;
+      if (audioPlayer.muted) {
+        volumeIcon.className = 'fa fa-volume-off text-slate-400';
+      } else {
+        updateVolumeIcon();
+      }
+    }
+    
+    // 倍速控制
+    speedSelect.addEventListener('change', changePlaybackSpeed);
+    
+    function changePlaybackSpeed() {
+      const speed = parseFloat(speedSelect.value);
+      audioPlayer.playbackRate = speed;
+      currentSpeedDisplay.textContent = `${speed}x`;
+    }
+    
+    // 音频结束时重置播放按钮
+    audioPlayer.addEventListener('ended', () => {
+      playPauseBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
+      // 音频结束时自动停止ASR
+      if (isAsrActive) {
+        stopASR();
+        asrResult.value += '\n[音频播放结束，已停止语音识别]';
+      }
+    });
+    
+    // 语音转文字功能（PaddleSpeech实现）
+    let isAsrActive = false;
+    let asrRequest = null; // 用于取消未完成的请求
+    
+    startAsrBtn.addEventListener('click', startASR);
+    stopAsrBtn.addEventListener('click', stopASR);
+    clearAsrBtn.addEventListener('click', clearASR);
+    
+    function startASR() {
+      // 验证后端服务是否可用
+      fetch('http://localhost:5000/asr', { method: 'OPTIONS' })
+        .catch(err => {
+          alert('无法连接到语音识别服务，请确保后端服务已启动');
+          return;
+        });
+      
+      if (audioPlayer.paused) {
+        togglePlayPause(); // 如果音频没在播放，先开始播放
+      }
+      
+      isAsrActive = true;
+      asrStatus.classList.remove('hidden');
+      startAsrBtn.disabled = true;
+      stopAsrBtn.disabled = false;
+      
+      // 初始识别提示
+      asrResult.value += '[开始语音识别...]\n';
+      asrResult.scrollTop = asrResult.scrollHeight;
+      
+      // 开始识别流程
+      fetchASRResult();
+    }
+    
+    function fetchASRResult() {
+      if (!isAsrActive) return;
+      
+      // 构建请求参数（包含当前音频URL和播放进度）
+      const requestData = {
+        audio_url: audioUrlInput.value,
+        current_time: audioPlayer.currentTime // 可选：用于后端实现分段识别
+      };
+      
+      // 发送请求到后端ASR服务
+      asrRequest = fetch('http://localhost:5000/asr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`服务响应错误: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (!isAsrActive) return; // 如果已停止，不再处理结果
+        
+        if (data.error) {
+          asrResult.value += `[识别错误: ${data.error}]\n`;
+        } else if (data.text) {
+          asrResult.value += `${data.text}\n`;
+        } else {
+          asrResult.value += '[未识别到有效语音]\n';
+        }
+        
+        asrResult.scrollTop = asrResult.scrollHeight; // 自动滚动到底部
+        
+        // 继续识别（根据音频播放状态决定是否继续）
+        if (!audioPlayer.ended) {
+          // 动态调整请求间隔（根据播放速度）
+          const interval = Math.max(1000, 3000 / audioPlayer.playbackRate);
+          setTimeout(fetchASRResult, interval);
+        }
+      })
+      .catch(error => {
+        if (!isAsrActive) return;
+        
+        console.error('ASR请求错误:', error);
+        asrResult.value += `[请求失败: ${error.message}，正在重试...]\n`;
+        asrResult.scrollTop = asrResult.scrollHeight;
+        
+        // 错误重试
+        setTimeout(fetchASRResult, 3000);
+      });
+    }
+    
+    function stopASR() {
+      isAsrActive = false;
+      // 取消未完成的请求
+      if (asrRequest) {
+        asrRequest.then(() => {}).catch(() => {}); // 忽略取消后的错误
+      }
+      
+      asrStatus.classList.add('hidden');
+      startAsrBtn.disabled = false;
+      stopAsrBtn.disabled = true;
+      asrResult.value += '[已停止语音识别]\n';
+      asrResult.scrollTop = asrResult.scrollHeight;
+    }
+    
+    function clearASR() {
+      asrResult.value = '';
+    }
+    
+    // 初始化页面
+    window.addEventListener('load', () => {
+      // 预加载音频元数据
+      audioPlayer.load();
+      audioPlayer.addEventListener('loadedmetadata', () => {
+        durationEl.textContent = formatTime(audioPlayer.duration);
+      });
+      
+      // 初始化音量图标
+      updateVolumeIcon();
+    });
+  </script>
+</body>
+</html>
