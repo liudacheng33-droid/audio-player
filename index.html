@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>高级音频播放器 | 语音转文字</title>
+  <title>实时采集播放声音 - 语音转文字（修复版）</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
   
-  <!-- Tailwind配置 -->
   <script>
     tailwind.config = {
       theme: {
@@ -28,34 +27,30 @@
   <style type="text/tailwindcss">
     @layer utilities {
       .glass-effect { @apply bg-white/10 backdrop-blur-md border border-white/20; }
-      .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     }
   </style>
 </head>
 
 <body class="font-inter bg-gradient-to-br from-slate-900 to-indigo-950 text-white min-h-screen p-4 md:p-8">
-  <!-- 保密横幅 -->
   <div class="fixed top-0 left-0 right-0 bg-warning/90 text-center py-2 z-50">
     <p class="font-medium">内部信息严格保密，禁止外传给部门外使用</p>
   </div>
 
   <div class="max-w-5xl mx-auto pt-12">
-    <!-- 标题 -->
     <header class="text-center mb-8 md:mb-12">
       <h1 class="text-[clamp(1.8rem,5vw,3rem)] font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">
-        音频播放器与语音转文字
+        实时采集播放声音 - 语音转文字
       </h1>
       <p class="text-slate-400 max-w-2xl mx-auto">
-        播放指定音频，调整播放速度（1-32倍），并实时将语音转换为文字
+        不下载音频，直接采集设备播放声音转文字 | 内置有效Token（30天有效期）
       </p>
     </header>
     
-    <!-- 主内容 -->
     <main class="space-y-8">
       <!-- 音频链接区域 -->
       <section class="glass-effect rounded-xl p-6 shadow-xl">
         <h2 class="text-xl font-semibold mb-4 flex items-center">
-          <i class="fa fa-link text-primary mr-2"></i>音频链接
+          <i class="fa fa-link text-primary mr-2"></i>音频播放链接
         </h2>
         <div class="flex flex-col md:flex-row gap-3">
           <input 
@@ -66,33 +61,40 @@
           >
           <button 
             id="copyBtn" 
-            class="bg-primary hover:bg-primary/80 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
+            class="bg-primary hover:bg-primary/80 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
           >
-            <i class="fa fa-copy"></i>
-            <span>复制链接</span>
+            <i class="fa fa-copy"></i>复制
           </button>
         </div>
-        <div id="copyAlert" class="mt-3 text-sm hidden">
-          <span class="inline-block px-3 py-1 rounded-full bg-green-500/20 text-green-400">链接已复制到剪贴板</span>
+        <div class="mt-3 text-sm text-amber-400">
+          <i class="fa fa-exclamation-circle mr-1"></i>提示：1. 确保音量调至50%以上 2. 点击播放后等待3-5秒看识别日志
         </div>
       </section>
       
-      <!-- 播放器区域 -->
+      <!-- 播放器+采集控制区域 -->
       <section class="glass-effect rounded-xl p-6 shadow-xl">
         <h2 class="text-xl font-semibold mb-4 flex items-center">
-          <i class="fa fa-play-circle text-primary mr-2"></i>音频播放控制
+          <i class="fa fa-play-circle text-primary mr-2"></i>播放与声音采集控制
         </h2>
         
-        <audio id="audioPlayer" src="" class="hidden"></audio>
+        <!-- 隐藏的音频播放器 -->
+        <audio id="audioPlayer" src="" preload="metadata" class="hidden"></audio>
         
         <div class="space-y-6">
-          <!-- 播放按钮 -->
-          <div class="flex justify-center">
+          <!-- 核心控制按钮（播放+采集一体） -->
+          <div class="flex justify-center gap-6">
             <button 
-              id="playPauseBtn" 
-              class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-primary hover:bg-primary/80 flex items-center justify-center transition-all duration-300 shadow-lg hover:shadow-primary/30 hover:scale-105"
+              id="startBtn" 
+              class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-secondary hover:bg-secondary/80 flex items-center justify-center transition-all duration-300"
             >
               <i class="fa fa-play text-2xl md:text-3xl"></i>
+            </button>
+            <button 
+              id="stopBtn" 
+              class="w-16 h-16 md:w-20 md:h-20 rounded-full bg-warning hover:bg-warning/80 flex items-center justify-center transition-all duration-300"
+              disabled
+            >
+              <i class="fa fa-stop text-2xl md:text-3xl"></i>
             </button>
           </div>
           
@@ -104,11 +106,10 @@
             </div>
             <div class="relative h-2 bg-slate-700 rounded-full overflow-hidden cursor-pointer" id="progressContainer">
               <div id="progressBar" class="absolute top-0 left-0 h-full bg-primary transition-all duration-150"></div>
-              <div id="bufferBar" class="absolute top-0 left-0 h-full bg-primary/30"></div>
             </div>
           </div>
           
-          <!-- 音量控制 -->
+          <!-- 音量控制（默认调至70%） -->
           <div class="flex items-center gap-3">
             <i class="fa fa-volume-up text-slate-400" id="volumeIcon"></i>
             <input 
@@ -117,490 +118,590 @@
               min="0" 
               max="1" 
               step="0.05" 
-              value="1" 
+              value="0.7" 
               class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
             >
+            <span class="text-sm text-slate-400">70%</span>
           </div>
           
-          <!-- 倍速选择 -->
-          <div class="flex items-center gap-3">
-            <i class="fa fa-tachometer text-slate-400"></i>
-            <label for="speedSelect" class="text-sm text-slate-400 whitespace-nowrap">播放速度:</label>
-            <select 
-              id="speedSelect" 
-              class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            ></select>
-            <span id="currentSpeedDisplay" class="text-sm bg-slate-800/50 px-3 py-1 rounded-lg">1x</span>
+          <!-- 采集状态提示 -->
+          <div id="recordStatus" class="text-center text-sm text-slate-400 hidden">
+            <i class="fa fa-microphone-slash mr-1"></i>未采集声音
           </div>
         </div>
       </section>
       
-      <!-- ASR区域 -->
+      <!-- ASR结果区域 -->
       <section class="glass-effect rounded-xl p-6 shadow-xl">
         <h2 class="text-xl font-semibold mb-4 flex items-center">
-          <i class="fa fa-microphone text-primary mr-2"></i>语音转文字 (ASR)
+          <i class="fa fa-microphone text-primary mr-2"></i>语音转文字结果（含详细日志）
         </h2>
         
         <div class="space-y-4">
-          <div class="flex flex-wrap gap-3">
-            <button 
-              id="startAsrBtn" 
-              class="bg-secondary hover:bg-secondary/80 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
-            >
-              <i class="fa fa-play"></i>
-              <span>开始转换</span>
-            </button>
-            <button 
-              id="stopAsrBtn" 
-              class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
-              disabled
-            >
-              <i class="fa fa-stop"></i>
-              <span>停止转换</span>
-            </button>
-            <button 
-              id="clearAsrBtn" 
-              class="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2"
-            >
-              <i class="fa fa-trash"></i>
-              <span>清空文本</span>
-            </button>
-          </div>
-          
           <div class="relative">
             <div id="asrStatus" class="hidden absolute top-3 right-3 text-sm px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 flex items-center gap-1">
-              <i class="fa fa-circle-o-notch fa-spin"></i>
-              <span>正在转换...</span>
+              <i class="fa fa-circle-o-notch fa-spin"></i>正在识别...
             </div>
             <textarea 
               id="asrResult" 
-              placeholder="语音转换的文字将显示在这里..." 
-              class="w-full h-48 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+              placeholder="播放音频后，实时识别结果将显示在这里..." 
+              class="w-full h-72 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
               readonly
             ></textarea>
           </div>
           
-          <div class="text-sm text-slate-500 italic">
-            <i class="fa fa-info-circle mr-1"></i>
-            已启用音频分块处理（每30秒一段）| 超时可尝试：1. 降低播放速度 2. 切换更快网络 3. 点击"更换代理"
-            <button id="changeProxyBtn" class="text-primary underline ml-2">更换代理</button>
+          <div class="flex justify-end gap-3">
+            <button 
+              id="clearBtn" 
+              class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2"
+            >
+              <i class="fa fa-trash"></i>清空结果
+            </button>
+            <button 
+              id="changeProxyBtn" 
+              class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2"
+            >
+              <i class="fa fa-exchange"></i>切换代理
+            </button>
+            <button 
+              id="testRecordBtn" 
+              class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2"
+            >
+              <i class="fa fa-microphone"></i>测试采集
+            </button>
           </div>
         </div>
       </section>
     </main>
-    
-    <!-- 页脚 -->
-    <footer class="mt-12 text-center text-slate-500 text-sm">
-      <p>© 2025 音频播放器与语音转文字工具 | 基于百度智能云ASR实现</p>
-    </footer>
   </div>
 
   <script>
-    // DOM元素
+    // 1. 核心配置
+    const BAIDU_ACCESS_TOKEN = '24.7ebd40046f39fe77865ffa4cc74c853b.2592000.1764854129.282335-120657125'; // 内置有效Token
+    const RECORD_CHUNK_DURATION = 3000; // 延长至3秒分块（确保有足够声音数据）
+    const PROXY_LIST = [ // 代理列表（优先国内稳定代理）
+      'https://corsproxy.io/?',
+      'https://api.proxyscrape.com/v3/forward/?url=',
+      'https://proxy.horocn.com/redirect/?url='
+    ];
+    let currentProxyIndex = 0;
+    let CORS_PROXY = PROXY_LIST[currentProxyIndex];
+
+    // 2. DOM元素
     const audioUrlInput = document.getElementById('audioUrl');
     const copyBtn = document.getElementById('copyBtn');
-    const copyAlert = document.getElementById('copyAlert');
     const audioPlayer = document.getElementById('audioPlayer');
-    const playPauseBtn = document.getElementById('playPauseBtn');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
     const progressContainer = document.getElementById('progressContainer');
     const progressBar = document.getElementById('progressBar');
-    const bufferBar = document.getElementById('bufferBar');
     const currentTimeEl = document.getElementById('currentTime');
     const durationEl = document.getElementById('duration');
     const volumeSlider = document.getElementById('volumeSlider');
     const volumeIcon = document.getElementById('volumeIcon');
-    const speedSelect = document.getElementById('speedSelect');
-    const currentSpeedDisplay = document.getElementById('currentSpeedDisplay');
-    const startAsrBtn = document.getElementById('startAsrBtn');
-    const stopAsrBtn = document.getElementById('stopAsrBtn');
-    const clearAsrBtn = document.getElementById('clearAsrBtn');
+    const recordStatus = document.getElementById('recordStatus');
     const asrResult = document.getElementById('asrResult');
     const asrStatus = document.getElementById('asrStatus');
+    const clearBtn = document.getElementById('clearBtn');
     const changeProxyBtn = document.getElementById('changeProxyBtn');
-    
-    // 音频参数
-    let audioParams = { format: 'mp3', rate: 16000, channel: 1 };
-    // 分块处理配置（每30秒一段，百度推荐单段不超过60秒）
-    const CHUNK_DURATION = 30; // 秒
-    let lastProcessedTime = 0; // 上次处理的时间点
-    
-    // 代理列表（可切换）
-    const PROXY_LIST = [
-      'https://api.allorigins.win/raw?url=',
-      'https://proxy.cors.sh/',
-      'https://cors.bridged.cc/'
-    ];
-    let currentProxyIndex = 0;
-    let CORS_PROXY = PROXY_LIST[currentProxyIndex];
-    
-    // 初始化音频链接
-    audioPlayer.src = audioUrlInput.value;
-    
-    // 生成1-32倍速选项
-    for (let i = 1; i <= 32; i++) {
-      const option = document.createElement('option');
-      option.value = i;
-      option.textContent = `${i}x`;
-      if (i === 1) option.selected = true;
-      speedSelect.appendChild(option);
+    const testRecordBtn = document.getElementById('testRecordBtn');
+
+    // 3. 状态变量
+    let audioContext = null; // 音频上下文（用于采集播放流）
+    let mediaRecorder = null; // 媒体录制器（采集声音）
+    let isRecording = false; // 是否正在采集
+    let recordChunks = []; // 录制的音频片段
+    let recordTimer = null; // 定时分块上传的定时器
+    let volumeDisplay = volumeSlider.nextElementSibling; // 音量百分比显示
+
+    // 4. 初始化页面
+    window.addEventListener('load', () => {
+      audioPlayer.src = audioUrlInput.value;
+      // 加载音频元数据（获取时长）
+      audioPlayer.addEventListener('loadedmetadata', () => {
+        durationEl.textContent = formatTime(audioPlayer.duration);
+      });
+      updateVolumeIcon();
+      updateVolumeDisplay();
+      // 初始日志：提示检查浏览器权限
+      asrResult.value += `[${new Date().toLocaleTimeString()}] 系统就绪：\n`;
+      asrResult.value += `  1. 确保浏览器未拦截音频权限（若弹窗请点击"允许"）\n`;
+      asrResult.value += `  2. 音量已默认调至70%，请勿静音\n`;
+      asrResult.value += `  3. 点击"播放"按钮开始采集识别\n`;
+    });
+
+    // 5. 复制链接
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(audioUrlInput.value)
+        .then(() => alert('链接已复制'))
+        .catch(() => alert('复制失败，请手动复制'));
+    });
+
+    // 6. 播放/采集控制（核心：开始播放+采集）
+    startBtn.addEventListener('click', async () => {
+      if (isRecording) return;
+
+      // 6.1 更新状态
+      isRecording = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      recordStatus.classList.remove('hidden', 'text-slate-400');
+      recordStatus.classList.add('text-green-400');
+      recordStatus.innerHTML = '<i class="fa fa-microphone mr-1"></i>正在采集播放声音（音量：70%）';
+      asrResult.value += `\n[${new Date().toLocaleTimeString()}] 开始播放并采集声音\n`;
+      asrStatus.classList.remove('hidden');
+
+      // 6.2 初始化音频上下文（用于采集播放流）
+      try {
+        if (!audioContext) {
+          // 关键：部分浏览器需要用户交互后才能创建AudioContext
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 音频上下文初始化成功\n`;
+
+          // 将音频播放器的输出转为MediaStream（关键：采集扬声器声音）
+          const source = audioContext.createMediaElementSource(audioPlayer);
+          const destination = audioContext.createMediaStreamDestination();
+          source.connect(destination); // 播放器 → 流目标（形成播放流）
+          source.connect(audioContext.destination); // 确保音频能正常播放（扬声器出声）
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 播放流采集通道已建立\n`;
+
+          // 初始化媒体录制器（采集播放流）- 强制使用WAV格式
+          const options = { mimeType: 'audio/wav; codecs=1' };
+          if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+            asrResult.value += `[${new Date().toLocaleTimeString()}] 警告：浏览器不支持WAV录制，将使用默认格式\n`;
+            mediaRecorder = new MediaRecorder(destination.stream);
+          } else {
+            mediaRecorder = new MediaRecorder(destination.stream, options);
+            asrResult.value += `[${new Date().toLocaleTimeString()}] 媒体录制器初始化成功（格式：WAV）\n`;
+          }
+
+          // 录制数据回调（收集音频片段，添加日志确认是否有数据）
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) {
+              recordChunks.push(e.data);
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 采集到声音片段（大小：${(e.data.size/1024).toFixed(2)}KB）\n`;
+            } else {
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 采集到空片段（可能音量太小或无声音）\n`;
+            }
+          };
+
+          // 录制停止回调
+          mediaRecorder.onstop = () => {
+            asrResult.value += `[${new Date().toLocaleTimeString()}] 当前片段采集结束（累计：${recordChunks.length}个）\n`;
+            recordChunks = [];
+          };
+
+          // 录制错误回调（关键：捕获采集错误）
+          mediaRecorder.onerror = (err) => {
+            asrResult.value += `[${new Date().toLocaleTimeString()}] 采集错误：${err.error || '未知错误'}\n`;
+            resetState();
+          };
+        }
+      } catch (err) {
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 初始化失败：${err.message}\n`;
+        resetState();
+        return;
+      }
+
+      // 6.3 开始播放音频 + 开始采集
+      try {
+        await audioPlayer.play();
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 音频开始播放\n`;
+      } catch (err) {
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 播放失败：${err.message}\n`;
+        resetState();
+        return;
+      }
+
+      try {
+        mediaRecorder.start();
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 声音采集已启动（每${RECORD_CHUNK_DURATION/1000}秒识别一次）\n`;
+      } catch (err) {
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 采集启动失败：${err.message}\n`;
+        audioPlayer.pause();
+        resetState();
+        return;
+      }
+
+      // 6.4 定时分块上传（每3秒上传一次片段到百度ASR）
+      recordTimer = setInterval(async () => {
+        if (!isRecording || recordChunks.length === 0) {
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 无有效片段（可能音量太小）\n`;
+          return;
+        }
+
+        // 6.4.1 停止当前录制，获取片段
+        mediaRecorder.stop();
+        const audioBlob = new Blob(recordChunks, { type: 'audio/wav' });
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 准备识别片段（大小：${(audioBlob.size/1024).toFixed(2)}KB）\n`;
+        recordChunks = [];
+
+        // 6.4.2 重新开始录制（下一个片段）
+        mediaRecorder.start();
+
+        // 6.4.3 转换音频格式（适配百度ASR：16000Hz、单声道、PCM）
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 正在转换音频格式...\n`;
+        const pcmBlob = await convertToBaiduFormat(audioBlob);
+        if (!pcmBlob) {
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 格式转换失败，跳过当前片段\n`;
+          return;
+        }
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 格式转换成功（PCM格式，大小：${(pcmBlob.size/1024).toFixed(2)}KB）\n`;
+
+        // 6.4.4 上传到百度ASR识别
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 正在发送识别请求（代理：${CORS_PROXY.split('/')[2]}）...\n`;
+        await sendToBaiduASR(pcmBlob);
+      }, RECORD_CHUNK_DURATION);
+    });
+
+    // 7. 停止播放/采集
+    stopBtn.addEventListener('click', () => {
+      resetState();
+      asrResult.value += `\n[${new Date().toLocaleTimeString()}] 已停止播放和采集\n`;
+    });
+
+    // 8. 音频播放进度更新
+    audioPlayer.addEventListener('timeupdate', () => {
+      const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+      progressBar.style.width = `${progress}%`;
+      currentTimeEl.textContent = formatTime(audioPlayer.currentTime);
+
+      // 音频播放结束，自动停止采集
+      if (audioPlayer.ended && isRecording) {
+        resetState();
+        asrResult.value += `\n[${new Date().toLocaleTimeString()}] 音频播放完毕，自动停止采集\n`;
+      }
+    });
+
+    // 9. 进度条跳转
+    progressContainer.addEventListener('click', (e) => {
+      const pos = (e.clientX - progressContainer.getBoundingClientRect().left) / progressContainer.offsetWidth;
+      audioPlayer.currentTime = pos * audioPlayer.duration;
+    });
+
+    // 10. 音量控制（增加百分比显示）
+    volumeSlider.addEventListener('input', () => {
+      audioPlayer.volume = volumeSlider.value;
+      updateVolumeIcon();
+      updateVolumeDisplay();
+      // 更新采集状态提示的音量
+      if (isRecording) {
+        recordStatus.innerHTML = `<i class="fa fa-microphone mr-1"></i>正在采集播放声音（音量：${volumeDisplay.textContent}）`;
+      }
+    });
+    // 更新音量图标
+    function updateVolumeIcon() {
+      if (audioPlayer.muted) {
+        volumeIcon.className = 'fa fa-volume-off text-slate-400';
+        return;
+      }
+      const vol = audioPlayer.volume;
+      volumeIcon.className = vol === 0 ? 'fa fa-volume-off text-slate-400' : 
+                             vol < 0.5 ? 'fa fa-volume-down text-slate-400' : 'fa fa-volume-up text-slate-400';
     }
-    
-    // 切换代理按钮
+    // 更新音量百分比显示
+    function updateVolumeDisplay() {
+      const volPercent = Math.round(audioPlayer.volume * 100);
+      volumeDisplay.textContent = `${volPercent}%`;
+    }
+    // 静音切换
+    volumeIcon.addEventListener('click', () => {
+      audioPlayer.muted = !audioPlayer.muted;
+      updateVolumeIcon();
+      if (isRecording) {
+        const volText = audioPlayer.muted ? '已静音（采集无效）' : `${volumeDisplay.textContent}`;
+        recordStatus.innerHTML = `<i class="fa fa-microphone mr-1"></i>正在采集播放声音（音量：${volText}）`;
+      }
+    });
+
+    // 11. 清空结果
+    clearBtn.addEventListener('click', () => {
+      asrResult.value = '';
+      asrResult.value += `[${new Date().toLocaleTimeString()}] 结果已清空，可重新开始\n`;
+    });
+
+    // 12. 切换代理
     changeProxyBtn.addEventListener('click', () => {
       currentProxyIndex = (currentProxyIndex + 1) % PROXY_LIST.length;
       CORS_PROXY = PROXY_LIST[currentProxyIndex];
-      asrResult.value += `[已切换代理：${CORS_PROXY.split('/')[2]}，请重新开始转换]\n`;
-      baiduAccessToken = null; // 重置Token，使用新代理重新获取
+      asrResult.value += `\n[${new Date().toLocaleTimeString()}] 已切换代理：${CORS_PROXY.split('/')[2]}\n`;
     });
-    
-    // 音频链接同步 + 参数检测
-    audioUrlInput.addEventListener('input', async () => {
-      audioPlayer.src = audioUrlInput.value;
-      audioPlayer.load();
-      playPauseBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
-      progressBar.style.width = '0%';
-      bufferBar.style.width = '0%';
-      currentTimeEl.textContent = '00:00';
-      durationEl.textContent = '00:00';
-      lastProcessedTime = 0;
-      
-      const alert = document.createElement('div');
-      alert.className = 'mt-3 text-sm';
-      alert.innerHTML = '<span class="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400">音频链接已更新，正在检测参数...</span>';
-      copyAlert.after(alert);
-      
+
+    // 13. 测试采集功能（单独测试是否能采集到声音）
+    testRecordBtn.addEventListener('click', async () => {
+      asrResult.value += `\n[${new Date().toLocaleTimeString()}] 开始测试采集功能...\n`;
       try {
-        await detectAudioParams(audioUrlInput.value);
-        alert.innerHTML = `<span class="inline-block px-3 py-1 rounded-full bg-green-500/20 text-green-400">音频参数检测完成：格式=${audioParams.format}，采样率=${audioParams.rate}Hz，声道=${audioParams.channel}</span>`;
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        // 测试播放流是否能正常捕获
+        const source = audioContext.createMediaElementSource(audioPlayer);
+        const destination = audioContext.createMediaStreamDestination();
+        source.connect(destination);
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 播放流捕获测试成功\n`;
+
+        // 测试录制器是否能创建
+        const testRecorder = new MediaRecorder(destination.stream);
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 录制器创建测试成功（支持格式：${testRecorder.mimeType}）\n`;
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 采集功能正常，可开始识别\n`;
       } catch (err) {
-        alert.innerHTML = `<span class="inline-block px-3 py-1 rounded-full bg-amber-500/20 text-amber-400">参数检测失败：${err.message}，将使用默认参数</span>`;
-      }
-      
-      setTimeout(() => alert.remove(), 5000);
-    });
-    
-    // 复制链接
-    copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText(audioUrlInput.value)
-        .then(() => {
-          copyAlert.classList.remove('hidden');
-          copyAlert.classList.add('animate-pulse-slow');
-          setTimeout(() => copyAlert.classList.add('hidden'), 2000);
-        })
-        .catch(() => alert('复制失败，请手动复制'));
-    });
-    
-    // 播放暂停
-    playPauseBtn.addEventListener('click', () => {
-      if (audioPlayer.paused || audioPlayer.ended) {
-        audioPlayer.play()
-          .then(() => playPauseBtn.innerHTML = '<i class="fa fa-pause text-2xl md:text-3xl"></i>')
-          .catch(() => alert('播放失败，请检查音频链接'));
-      } else {
-        audioPlayer.pause();
-        playPauseBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 采集测试失败：${err.message}\n`;
+        asrResult.value += `  可能原因：1. 浏览器不支持MediaRecorder 2. 音频权限被拦截\n`;
+        asrResult.value += `  解决方案：使用Chrome浏览器，确保未拦截权限\n`;
       }
     });
-    
-    // 进度条更新
-    audioPlayer.addEventListener('timeupdate', () => {
-      const { currentTime, duration, buffered } = audioPlayer;
-      if (duration) progressBar.style.width = `${(currentTime / duration) * 100}%`;
-      if (buffered.length > 0) {
-        const buffPercent = (buffered.end(buffered.length - 1) / duration) * 100;
-        bufferBar.style.width = `${buffPercent}%`;
+
+    // 14. 核心工具函数：转换音频格式为百度ASR要求（16000Hz、单声道、PCM）
+    async function convertToBaiduFormat(audioBlob) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            // 解码音频
+            const arrayBuffer = reader.result;
+            let decodedBuffer;
+            try {
+              decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 音频解码成功（原始采样率：${decodedBuffer.sampleRate}Hz，声道：${decodedBuffer.numberOfChannels}）\n`;
+            } catch (decodeErr) {
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 音频解码失败：${decodeErr.message}\n`;
+              resolve(null);
+              return;
+            }
+
+            // 重采样为16000Hz（百度ASR推荐）
+            let resampledBuffer;
+            try {
+              resampledBuffer = resampleAudio(decodedBuffer, 16000);
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 重采样成功（目标采样率：16000Hz）\n`;
+            } catch (resampleErr) {
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 重采样失败：${resampleErr.message}\n`;
+              resolve(null);
+              return;
+            }
+
+            // 转换为单声道
+            let monoBuffer;
+            try {
+              monoBuffer = convertToMono(resampledBuffer);
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 声道转换成功（目标：单声道）\n`;
+            } catch (monoErr) {
+              asrResult.value += `[${new Date().toLocaleTimeString()}] 声道转换失败：${monoErr.message}\n`;
+              resolve(null);
+              return;
+            }
+
+            // 转换为Int16格式PCM（百度ASR要求）
+            let pcmData;
+            try {
+              pcmData = convertToPCM(monoBuffer);
+              asrResult.value += `[${new Date().toLocaleTimeString()}] PCM格式转换成功（数据长度：${pcmData.length}）\n`;
+            } catch (pcmErr) {
+              asrResult.value += `[${new Date().toLocaleTimeString()}] PCM转换失败：${pcmErr.message}\n`;
+              resolve(null);
+              return;
+            }
+
+            // 封装为Blob（用于上传）
+            const pcmBlob = new Blob([pcmData], { type: 'audio/pcm' });
+            resolve(pcmBlob);
+          } catch (err) {
+            asrResult.value += `[${new Date().toLocaleTimeString()}] 格式转换总错误：${err.message}\n`;
+            resolve(null);
+          }
+        };
+        reader.readAsArrayBuffer(audioBlob);
+      });
+    }
+
+    // 14.1 子函数：音频重采样（转为16000Hz）
+    function resampleAudio(buffer, targetSampleRate) {
+      const sourceSampleRate = buffer.sampleRate;
+      if (sourceSampleRate === targetSampleRate) return buffer;
+
+      const sourceLength = buffer.length;
+      const targetLength = Math.floor(sourceLength * (targetSampleRate / sourceSampleRate));
+      const targetBuffer = audioContext.createBuffer(
+        buffer.numberOfChannels,
+        targetLength,
+        targetSampleRate
+      );
+
+      const sourceData = buffer.getChannelData(0);
+      const targetData = targetBuffer.getChannelData(0);
+
+      // 线性插值重采样（简单高效）
+      for (let i = 0; i < targetLength; i++) {
+        const sourceIndex = i * (sourceSampleRate / targetSampleRate);
+        const index1 = Math.floor(sourceIndex);
+        const index2 = Math.min(index1 + 1, sourceLength - 1);
+        const fraction = sourceIndex - index1;
+        targetData[i] = sourceData[index1] * (1 - fraction) + sourceData[index2] * fraction;
       }
-      currentTimeEl.textContent = formatTime(currentTime);
-      if (duration) durationEl.textContent = formatTime(duration);
-    });
-    
-    // 时间格式化
+
+      return targetBuffer;
+    }
+
+    // 14.2 子函数：转为单声道
+    function convertToMono(buffer) {
+      if (buffer.numberOfChannels === 1) return buffer;
+
+      const monoBuffer = audioContext.createBuffer(1, buffer.length, buffer.sampleRate);
+      const monoData = monoBuffer.getChannelData(0);
+      const leftData = buffer.getChannelData(0);
+      const rightData = buffer.getChannelData(1);
+
+      // 左右声道混合为单声道
+      for (let i = 0; i < buffer.length; i++) {
+        monoData[i] = (leftData[i] + rightData[i]) / 2;
+      }
+
+      return monoBuffer;
+    }
+
+    // 14.3 子函数：转为Int16格式PCM
+    function convertToPCM(buffer) {
+      const channelData = buffer.getChannelData(0);
+      const pcmData = new Int16Array(channelData.length);
+
+      // 将[-1,1]的浮点数转为[-32768,32767]的Int16
+      for (let i = 0; i < channelData.length; i++) {
+        pcmData[i] = Math.max(-1, Math.min(1, channelData[i])) * 32768;
+      }
+
+      return pcmData;
+    }
+
+    // 15. 核心工具函数：上传音频片段到百度ASR（增加详细请求日志）
+    async function sendToBaiduASR(pcmBlob) {
+      try {
+        // 构造百度ASR请求参数
+        const formData = new FormData();
+        formData.append('format', 'pcm'); // 格式：PCM
+        formData.append('rate', 16000); // 采样率：16000Hz
+        formData.append('channel', 1); // 声道：单声道
+        formData.append('cuid', 'realtime-record-user-' + Date.now()); // 唯一设备标识（避免重复）
+        formData.append('token', BAIDU_ACCESS_TOKEN); // 内置Token
+        formData.append('speech', pcmBlob); // 音频数据
+        formData.append('len', pcmBlob.size); // 音频大小
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 请求参数构造完成（Token已内置）\n`;
+
+        // 发送请求（通过代理绕开跨域）
+        const asrUrl = 'https://vop.baidu.com/server_api';
+        const proxyAsrUrl = `${CORS_PROXY}${encodeURIComponent(asrUrl)}`;
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 请求地址：${proxyAsrUrl}\n`;
+
+        let res;
+        try {
+          res = await Promise.race([
+            fetch(proxyAsrUrl, {
+              method: 'POST',
+              body: formData,
+              headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/114.0.0.0 Safari/537.36',
+                'Accept': '*/*'
+              },
+              timeout: 8000 // 延长超时到8秒
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('识别请求超时（8秒）')), 8000))
+          ]);
+        } catch (fetchErr) {
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 请求发送失败：${fetchErr.message}\n`;
+          asrResult.value += `  解决方案：1. 点击"切换代理"尝试其他线路 2. 检查网络是否能访问百度\n`;
+          return;
+        }
+
+        // 处理响应
+        if (!res.ok) {
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 响应失败（状态码：${res.status}）\n`;
+          const errorText = await res.text().catch(() => '无错误信息');
+          asrResult.value += `  错误详情：${errorText}\n`;
+          return;
+        }
+
+        // 解析识别结果
+        let result;
+        try {
+          result = await res.json();
+        } catch (parseErr) {
+          asrResult.value += `[${new Date().toLocaleTimeString()}] 结果解析失败：${parseErr.message}\n`;
+          const rawText = await res.text().catch(() => '无原始数据');
+          asrResult.value += `  原始响应：${rawText}\n`;
+          return;
+        }
+
+        // 处理识别结果
+        if (result.err_no === 0) {
+          // 识别成功，追加结果
+          const text = result.result.join('').replace(/。$/, ''); // 去除末尾多余句号
+          asrResult.value += `[${new Date().toLocaleTimeString()}] ✅ 识别成功：${text}\n`;
+        } else {
+          // 识别失败，提示错误和解决方案
+          const errorMap = {
+            3300: '参数错误（格式/采样率不匹配）',
+            3301: '格式错误（请确保是PCM格式）',
+            3302: '无有效语音（音量太小或无声音）',
+            3303: '额度用尽（百度ASR免费额度已用完）',
+            3304: '片段过长（当前已限制为3秒）',
+            3305: '请求频繁（请降低请求频率）',
+            3307: 'Token无效（请重新获取Token）',
+            3308: '服务不可用（百度ASR服务维护）',
+            3314: '语音数据无效（格式转换错误）'
+          };
+          const errorMsg = errorMap[result.err_no] || result.err_msg;
+          asrResult.value += `[${new Date().toLocaleTimeString()}] ❌ 识别失败（${result.err_no}）：${errorMsg}\n`;
+          // 针对常见错误给出解决方案
+          if (result.err_no === 3302) {
+            asrResult.value += `  解决方案：1. 调高音量（当前${volumeDisplay.textContent}） 2. 确保音频有声音\n`;
+          } else if (result.err_no === 3307) {
+            asrResult.value += `  解决方案：1. 重新获取百度Token 2. 检查Token是否过期\n`;
+          } else if (result.err_no === 3303) {
+            asrResult.value += `  解决方案：1. 更换百度账号获取新额度 2. 升级百度ASR服务\n`;
+          }
+        }
+      } catch (err) {
+        asrResult.value += `[${new Date().toLocaleTimeString()}] 识别总错误：${err.message}\n`;
+      }
+      // 滚动到最新结果
+      asrResult.scrollTop = asrResult.scrollHeight;
+    }
+
+    // 16. 工具函数：时间格式化（秒→MM:SS）
     function formatTime(seconds) {
       const minutes = Math.floor(seconds / 60);
       const secs = Math.floor(seconds % 60);
       return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
-    
-    // 进度条跳转
-    progressContainer.addEventListener('click', (e) => {
-      const pos = (e.clientX - progressContainer.getBoundingClientRect().left) / progressContainer.offsetWidth;
-      audioPlayer.currentTime = pos * audioPlayer.duration;
-    });
-    
-    // 音量控制
-    volumeSlider.addEventListener('input', () => {
-      audioPlayer.volume = volumeSlider.value;
-      updateVolumeIcon();
-    });
-    function updateVolumeIcon() {
-      const vol = audioPlayer.volume;
-      volumeIcon.className = vol === 0 ? 'fa fa-volume-off text-slate-400' : 
-                             vol < 0.5 ? 'fa fa-volume-down text-slate-400' : 'fa fa-volume-up text-slate-400';
-    }
-    volumeIcon.addEventListener('click', () => {
-      audioPlayer.muted = !audioPlayer.muted;
-      volumeIcon.className = audioPlayer.muted ? 'fa fa-volume-off text-slate-400' : volumeIcon.className;
-    });
-    
-    // 倍速控制
-    speedSelect.addEventListener('change', () => {
-      const speed = parseFloat(speedSelect.value);
-      audioPlayer.playbackRate = speed;
-      currentSpeedDisplay.textContent = `${speed}x`;
-    });
-    
-    // 音频结束处理
-    audioPlayer.addEventListener('ended', () => {
-      playPauseBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
-      if (isAsrActive) {
-        stopASR();
-        asrResult.value += '\n[音频结束，已停止识别]';
+
+    // 17. 工具函数：重置状态（停止播放+采集）
+    function resetState() {
+      // 停止播放
+      audioPlayer.pause();
+      // 停止采集
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
       }
-    });
-    
-    // 检测音频参数
-    async function detectAudioParams(audioUrl) {
-      return new Promise((resolve, reject) => {
-        const urlParts = audioUrl.split('.');
-        const ext = urlParts[urlParts.length - 1].toLowerCase().split('?')[0];
-        const supportedFormats = ['mp3', 'wav', 'amr', 'm4a'];
-        audioParams.format = supportedFormats.includes(ext) ? ext : 'mp3';
-        
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const request = new XMLHttpRequest();
-        request.open('GET', audioUrl, true);
-        request.responseType = 'arraybuffer';
-        
-        request.onload = function() {
-          audioContext.decodeAudioData(request.response, (buffer) => {
-            audioParams.rate = buffer.sampleRate;
-            audioParams.channel = buffer.numberOfChannels > 1 ? 1 : buffer.numberOfChannels;
-            resolve();
-          }, (err) => {
-            reject(new Error(`无法解析音频：${err.message}`));
-          });
-        };
-        
-        request.onerror = () => {
-          reject(new Error('网络错误，无法获取音频信息'));
-        };
-        
-        request.send();
-      });
-    }
-    
-    // 百度ASR核心逻辑（分块处理+超时优化）
-    let isAsrActive = false;
-    let baiduAccessToken = null;
-    const BAIDU_CONFIG = {
-      appId: '120657125',
-      apiKey: 'ChGkXxbZLSk1osaRNpRbixxR',
-      secretKey: '6ktcmDIlIynvQ9XGgG8DmlZqpqXROhgQ'
-    };
-    
-    startAsrBtn.addEventListener('click', startASR);
-    stopAsrBtn.addEventListener('click', stopASR);
-    clearAsrBtn.addEventListener('click', () => {
-      asrResult.value = '';
-      lastProcessedTime = 0;
-    });
-    
-    async function startASR() {
-      if (audioPlayer.paused) audioPlayer.play().then(() => {
-        playPauseBtn.innerHTML = '<i class="fa fa-pause text-2xl md:text-3xl"></i>';
-      });
-      
-      isAsrActive = true;
-      asrStatus.classList.remove('hidden');
-      startAsrBtn.disabled = true;
-      stopAsrBtn.disabled = false;
-      asrResult.value += '[开始语音识别...]\n';
-      asrResult.value += `[使用音频参数：格式=${audioParams.format}，采样率=${audioParams.rate}Hz，声道=${audioParams.channel}]\n`;
-      asrResult.value += `[采用分块处理：每${CHUNK_DURATION}秒识别一段]\n`;
-      asrResult.scrollTop = asrResult.scrollHeight;
-      
-      // 获取Token
-      if (!baiduAccessToken) {
-        try {
-          const tokenUrl = `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${encodeURIComponent(BAIDU_CONFIG.apiKey)}&client_secret=${encodeURIComponent(BAIDU_CONFIG.secretKey)}`;
-          const proxyUrl = `${CORS_PROXY}${encodeURIComponent(tokenUrl)}`;
-          
-          const res = await fetch(proxyUrl, {
-            method: 'GET',
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/114.0.0.0 Safari/537.36' }
-          });
-          
-          if (!res.ok) throw new Error(`Token请求失败（状态码：${res.status}，代理：${CORS_PROXY.split('/')[2]}）`);
-          
-          const data = await res.json();
-          if (data.error) throw new Error(`${data.error}：${data.error_description}`);
-          
-          baiduAccessToken = data.access_token;
-          asrResult.value += '[已获取识别权限，开始分块转换...]\n';
-        } catch (err) {
-          asrResult.value += `[Token请求错误：${err.message}]\n`;
-          stopASR();
-          return;
-        }
+      // 清除定时器
+      if (recordTimer) {
+        clearInterval(recordTimer);
+        recordTimer = null;
       }
-      
-      // 开始分块处理
-      processAudioChunk();
-    }
-    
-    // 分块处理音频（只处理当前播放位置的30秒片段）
-    async function processAudioChunk() {
-      if (!isAsrActive) return;
-      
-      const currentTime = audioPlayer.currentTime;
-      // 检查是否需要处理新的片段（当前时间超过上次处理时间+分块时长）
-      if (currentTime - lastProcessedTime < CHUNK_DURATION && lastProcessedTime !== 0) {
-        // 未到新片段，等待一段时间后再检查
-        const waitTime = Math.max(1000, (CHUNK_DURATION - (currentTime - lastProcessedTime)) * 1000);
-        setTimeout(processAudioChunk, waitTime);
-        return;
-      }
-      
-      try {
-        // 记录当前处理的时间点
-        lastProcessedTime = currentTime;
-        asrResult.value += `[处理片段：${formatTime(currentTime)} - ${formatTime(currentTime + CHUNK_DURATION)}]\n`;
-        
-        // 下载完整音频（实际项目中可优化为只下载片段，此处简化处理）
-        const proxyAudioUrl = `${CORS_PROXY}${encodeURIComponent(audioUrlInput.value)}`;
-        const audioRes = await Promise.race([
-          fetch(proxyAudioUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('音频下载超时（15秒）')), 15000))
-        ]);
-        
-        if (!audioRes.ok) throw new Error(`音频下载失败（状态码：${audioRes.status}）`);
-        
-        // 截取当前时间段的音频（使用Web Audio API处理）
-        const audioBlob = await audioRes.blob();
-        const chunkBlob = await extractAudioChunk(audioBlob, currentTime, currentTime + CHUNK_DURATION);
-        
-        const formData = new FormData();
-        formData.append('format', audioParams.format);
-        formData.append('rate', audioParams.rate);
-        formData.append('channel', audioParams.channel);
-        formData.append('cuid', `asr-player-${BAIDU_CONFIG.appId}`);
-        formData.append('token', baiduAccessToken);
-        formData.append('speech', chunkBlob);
-        formData.append('len', chunkBlob.size);
-        
-        // 识别请求（延长超时到20秒）
-        const asrUrl = 'https://vop.baidu.com/server_api';
-        const proxyAsrUrl = `${CORS_PROXY}${encodeURIComponent(asrUrl)}`;
-        const asrRes = await Promise.race([
-          fetch(proxyAsrUrl, { 
-            method: 'POST', 
-            body: formData,
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('识别请求超时（20秒）')), 20000))
-        ]);
-        
-        const asrData = await asrRes.json();
-        
-        if (asrData.err_no === 0) {
-          asrResult.value += `${asrData.result.join('')}\n`;
-        } else {
-          const errorMap = {
-            3300: '参数错误（片段参数不匹配）',
-            3301: '格式错误（片段格式不支持）',
-            3302: '无有效语音（片段可能静音）',
-            3303: '额度用尽',
-            3304: '片段过长（已自动限制为30秒）',
-            3305: '请求频繁（稍后重试）',
-            3307: 'Token无效（刷新页面）',
-            3308: '百度服务不可用'
-          };
-          asrResult.value += `[片段识别错误：${errorMap[asrData.err_no] || asrData.err_msg}（错误码：${asrData.err_no}）]\n`;
-        }
-      } catch (err) {
-        asrResult.value += `[片段处理失败：${err.message}，5秒后重试该片段...]\n`;
-        setTimeout(processAudioChunk, 5000); // 延长重试间隔，避免网络拥堵
-        return;
-      }
-      
-      asrResult.scrollTop = asrResult.scrollHeight;
-      
-      // 检查是否继续处理下一段
-      if (!audioPlayer.ended && isAsrActive) {
-        setTimeout(processAudioChunk, 1000); // 1秒后检查是否需要处理下一段
-      }
-    }
-    
-    // 截取音频片段（从startTime到endTime）
-    async function extractAudioChunk(originalBlob, startTime, endTime) {
-      return new Promise((resolve, reject) => {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const fileReader = new FileReader();
-        
-        fileReader.onload = function() {
-          audioContext.decodeAudioData(fileReader.result, (buffer) => {
-            // 计算片段的采样点范围
-            const startSample = Math.floor(startTime * buffer.sampleRate);
-            const endSample = Math.min(Math.floor(endTime * buffer.sampleRate), buffer.length);
-            
-            // 创建新的音频缓冲区
-            const chunkBuffer = audioContext.createBuffer(
-              buffer.numberOfChannels,
-              endSample - startSample,
-              buffer.sampleRate
-            );
-            
-            // 复制音频数据到新缓冲区
-            for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-              const chunkData = chunkBuffer.getChannelData(channel);
-              chunkData.set(buffer.getChannelData(channel).subarray(startSample, endSample));
-            }
-            
-            // 将缓冲区转换为Blob
-            const source = audioContext.createBufferSource();
-            source.buffer = chunkBuffer;
-            const dest = audioContext.createMediaStreamDestination();
-            source.connect(dest);
-            
-            const recorder = new MediaRecorder(dest.stream);
-            const chunks = [];
-            recorder.ondataavailable = (e) => chunks.push(e.data);
-            recorder.onstop = () => resolve(new Blob(chunks, { type: originalBlob.type }));
-            
-            source.start(0);
-            recorder.start();
-            setTimeout(() => {
-              recorder.stop();
-              source.stop();
-            }, (endTime - startTime) * 1000);
-          }, reject);
-        };
-        
-        fileReader.readAsArrayBuffer(originalBlob);
-      });
-    }
-    
-    function stopASR() {
-      isAsrActive = false;
+      // 重置状态变量
+      isRecording = false;
+      recordChunks = [];
+      // 更新UI
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      recordStatus.classList.add('text-slate-400');
+      recordStatus.classList.remove('text-green-400');
+      recordStatus.innerHTML = '<i class="fa fa-microphone-slash mr-1"></i>未采集声音';
       asrStatus.classList.add('hidden');
-      startAsrBtn.disabled = false;
-      stopAsrBtn.disabled = true;
-      asrResult.value += '[已停止语音识别]\n';
     }
-    
-    // 页面初始化
-    window.addEventListener('load', async () => {
-      audioPlayer.load();
-      audioPlayer.addEventListener('loadedmetadata', () => {
-        durationEl.textContent = formatTime(audioPlayer.duration);
-      });
-      updateVolumeIcon();
-      
-      try {
-        await detectAudioParams(audioUrlInput.value);
-        console.log('初始音频参数检测完成：', audioParams);
-      } catch (err) {
-        console.log('初始参数检测失败：', err);
+
+    // 18. 页面关闭前停止采集
+    window.addEventListener('beforeunload', () => {
+      if (isRecording) {
+        resetState();
       }
     });
   </script>
