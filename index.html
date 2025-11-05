@@ -70,7 +70,7 @@
           <i class="fa fa-play-circle text-primary mr-2"></i>播放控制
         </h2>
         
-        <!-- 核心音频元素（可见化便于调试） -->
+        <!-- 核心音频元素 -->
         <audio 
           id="audioPlayer" 
           controls 
@@ -114,7 +114,7 @@
             <span class="text-sm text-green-400 w-[40px] text-right" id="volumeDisplay">100%</span>
           </div>
           
-          <!-- 播放速度控制（0.2-8倍） -->
+          <!-- 播放速度控制 -->
           <div class="flex items-center gap-3">
             <i class="fa fa-tachometer text-blue-400"></i>
             <label class="text-sm text-slate-400 min-w-[50px]">速度</label>
@@ -183,16 +183,15 @@
     const errorLog = document.getElementById('errorLog');
     const clearLogBtn = document.getElementById('clearLogBtn');
 
-    // 状态变量
+    // 状态变量（新增source保存音频源节点）
     let audioContext = null;
     let analyser = null;
+    let source = null; // 关键：保存当前的MediaElementSourceNode
     let isPlaying = false;
 
     // 初始化
     window.addEventListener('load', () => {
-      // 绑定音频源到输入框
       updateAudioSource();
-      // 监听链接变化
       audioUrlInput.addEventListener('input', updateAudioSource);
     });
 
@@ -213,14 +212,12 @@
           playBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
           isPlaying = false;
         } else {
-          // 开始播放（处理浏览器自动播放限制）
           const url = audioUrlInput.value.trim();
           if (!url) {
             logError('请输入有效的音频链接');
             return;
           }
 
-          // 确保音频源正确
           if (audioPlayer.src !== url) {
             audioPlayer.src = url;
           }
@@ -231,11 +228,10 @@
           stopBtn.disabled = false;
           isPlaying = true;
 
-          // 初始化声音强度检测
+          // 初始化声音强度检测（确保先清理旧连接）
           initAudioAnalysis();
         }
       } catch (err) {
-        // 捕获播放失败（如自动播放限制）
         logError(`播放失败：${err.message}，请检查链接或点击播放器控件重试`);
       }
     });
@@ -243,11 +239,11 @@
     // 停止播放
     stopBtn.addEventListener('click', () => {
       audioPlayer.pause();
-      audioPlayer.currentTime = 0; // 重置播放进度
+      audioPlayer.currentTime = 0;
       playBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
       stopBtn.disabled = true;
       isPlaying = false;
-      resetAudioAnalysis();
+      resetAudioAnalysis(); // 彻底清理连接
     });
 
     // 音量控制
@@ -257,26 +253,40 @@
       volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
     });
 
-    // 播放速度控制（0.2-8倍）
+    // 播放速度控制
     speedSlider.addEventListener('input', () => {
       const speed = parseFloat(speedSlider.value);
-      audioPlayer.playbackRate = speed; // HTML5音频原生支持速度调节
+      audioPlayer.playbackRate = speed;
       speedDisplay.textContent = `${speed.toFixed(1)}x`;
     });
 
-    // 初始化声音强度分析
+    // 初始化声音强度分析（核心修复）
     function initAudioAnalysis() {
-      if (audioContext) return;
+      // 先清理可能存在的旧连接（关键修复点）
+      if (source) {
+        source.disconnect(); // 断开旧的音频源连接
+        source = null;
+      }
+      if (analyser) {
+        analyser.disconnect();
+        analyser = null;
+      }
+      if (audioContext) {
+        // 关闭旧的音频上下文，避免冲突
+        audioContext.close().catch(err => logError(`关闭旧上下文失败：${err.message}`));
+        audioContext = null;
+      }
 
       try {
+        // 创建新的音频上下文和分析器
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 2048;
         
-        // 直接从音频元素创建源（修复播放无响应的核心）
-        const source = audioContext.createMediaElementSource(audioPlayer);
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
+        // 创建新的音频源节点并绑定（确保唯一连接）
+        source = audioContext.createMediaElementSource(audioPlayer);
+        source.connect(analyser); // 连接到分析器
+        analyser.connect(audioContext.destination); // 连接到扬声器
 
         // 实时更新强度
         const bufferLength = analyser.frequencyBinCount;
@@ -310,13 +320,23 @@
       }
     }
 
-    // 重置声音强度分析
+    // 重置声音强度分析（彻底清理）
     function resetAudioAnalysis() {
+      // 断开音频源连接（关键修复点）
+      if (source) {
+        source.disconnect();
+        source = null;
+      }
       if (analyser) {
         analyser.disconnect();
+        analyser = null;
       }
-      audioContext = null;
-      analyser = null;
+      // 关闭音频上下文
+      if (audioContext) {
+        audioContext.close().catch(err => logError(`关闭上下文失败：${err.message}`));
+        audioContext = null;
+      }
+      // 重置UI
       audioLevelBar.style.width = '0%';
       audioLevelText.textContent = '未检测';
       audioLevelText.className = 'text-sm text-slate-400 w-[60px] text-right';
