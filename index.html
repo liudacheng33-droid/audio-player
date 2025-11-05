@@ -70,7 +70,7 @@
           <i class="fa fa-play-circle text-primary mr-2"></i>播放控制
         </h2>
         
-        <!-- 核心音频元素 -->
+        <!-- 核心音频元素（保留原生控件，确保基础播放功能） -->
         <audio 
           id="audioPlayer" 
           controls 
@@ -129,16 +129,6 @@
             >
             <span class="text-sm text-blue-400 w-[40px] text-right" id="speedDisplay">1.0x</span>
           </div>
-          
-          <!-- 声音强度检测 -->
-          <div class="flex items-center gap-3">
-            <i class="fa fa-signal text-slate-400"></i>
-            <label class="text-sm text-slate-400 min-w-[50px]">强度</label>
-            <div class="flex-1 h-3 bg-slate-700 rounded-full overflow-hidden">
-              <div id="audioLevelBar" class="h-full bg-red-400 w-0 transition-all duration-200"></div>
-            </div>
-            <span id="audioLevelText" class="text-sm text-slate-400 w-[60px] text-right">未检测</span>
-          </div>
         </div>
       </section>
       
@@ -178,24 +168,31 @@
     const volumeDisplay = document.getElementById('volumeDisplay');
     const speedSlider = document.getElementById('speedSlider');
     const speedDisplay = document.getElementById('speedDisplay');
-    const audioLevelBar = document.getElementById('audioLevelBar');
-    const audioLevelText = document.getElementById('audioLevelText');
     const errorLog = document.getElementById('errorLog');
     const clearLogBtn = document.getElementById('clearLogBtn');
 
-    // 状态变量（新增source保存音频源节点）
-    let audioContext = null;
-    let analyser = null;
-    let source = null; // 关键：保存当前的MediaElementSourceNode
+    // 状态变量（简化为最基础的播放状态）
     let isPlaying = false;
 
-    // 初始化
+    // 初始化：绑定音频源和事件
     window.addEventListener('load', () => {
+      // 绑定音频源到输入框
       updateAudioSource();
       audioUrlInput.addEventListener('input', updateAudioSource);
+      
+      // 监听音频元素的错误事件（关键：捕获播放失败原因）
+      audioPlayer.addEventListener('error', (e) => {
+        const errorCodes = {
+          1: '音频加载中断',
+          2: '音频格式不支持',
+          3: '音频解码失败',
+          4: '音频播放失败'
+        };
+        logError(`音频元素错误：${errorCodes[e.target.error.code] || '未知错误'}`);
+      });
     });
 
-    // 更新音频源
+    // 更新音频源（直接赋值给audio元素，不经过复杂处理）
     function updateAudioSource() {
       const url = audioUrlInput.value.trim();
       if (url) {
@@ -203,7 +200,7 @@
       }
     }
 
-    // 播放/暂停切换
+    // 播放/暂停切换（仅操作原生audio元素，不添加额外音频分析）
     playBtn.addEventListener('click', async () => {
       try {
         if (isPlaying) {
@@ -212,135 +209,52 @@
           playBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
           isPlaying = false;
         } else {
+          // 开始播放（直接调用原生play方法）
           const url = audioUrlInput.value.trim();
           if (!url) {
             logError('请输入有效的音频链接');
             return;
           }
 
+          // 确保音频源正确
           if (audioPlayer.src !== url) {
             audioPlayer.src = url;
           }
 
-          // 启动播放
+          // 启动播放（处理浏览器自动播放限制）
           await audioPlayer.play();
           playBtn.innerHTML = '<i class="fa fa-pause text-2xl md:text-3xl"></i>';
           stopBtn.disabled = false;
           isPlaying = true;
-
-          // 初始化声音强度检测（确保先清理旧连接）
-          initAudioAnalysis();
         }
       } catch (err) {
-        logError(`播放失败：${err.message}，请检查链接或点击播放器控件重试`);
+        // 详细捕获播放失败原因（如自动播放限制、链接无效等）
+        logError(`播放失败：${err.message}。建议：1.检查链接有效性；2.手动点击音频控件的播放按钮；3.刷新页面重试`);
       }
     });
 
-    // 停止播放
+    // 停止播放（重置进度）
     stopBtn.addEventListener('click', () => {
       audioPlayer.pause();
       audioPlayer.currentTime = 0;
       playBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
       stopBtn.disabled = true;
       isPlaying = false;
-      resetAudioAnalysis(); // 彻底清理连接
     });
 
-    // 音量控制
+    // 音量控制（直接操作audio元素的volume属性）
     volumeSlider.addEventListener('input', () => {
       const volume = parseFloat(volumeSlider.value);
       audioPlayer.volume = volume;
       volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
     });
 
-    // 播放速度控制
+    // 播放速度控制（原生支持的playbackRate）
     speedSlider.addEventListener('input', () => {
       const speed = parseFloat(speedSlider.value);
       audioPlayer.playbackRate = speed;
       speedDisplay.textContent = `${speed.toFixed(1)}x`;
     });
-
-    // 初始化声音强度分析（核心修复）
-    function initAudioAnalysis() {
-      // 先清理可能存在的旧连接（关键修复点）
-      if (source) {
-        source.disconnect(); // 断开旧的音频源连接
-        source = null;
-      }
-      if (analyser) {
-        analyser.disconnect();
-        analyser = null;
-      }
-      if (audioContext) {
-        // 关闭旧的音频上下文，避免冲突
-        audioContext.close().catch(err => logError(`关闭旧上下文失败：${err.message}`));
-        audioContext = null;
-      }
-
-      try {
-        // 创建新的音频上下文和分析器
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
-        
-        // 创建新的音频源节点并绑定（确保唯一连接）
-        source = audioContext.createMediaElementSource(audioPlayer);
-        source.connect(analyser); // 连接到分析器
-        analyser.connect(audioContext.destination); // 连接到扬声器
-
-        // 实时更新强度
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        
-        function updateLevel() {
-          if (!analyser || !isPlaying) return;
-          analyser.getByteFrequencyData(dataArray);
-          const average = dataArray.reduce((sum, val) => sum + val, 0) / bufferLength;
-          const levelPercent = Math.min(100, Math.floor(average / 255 * 100));
-
-          audioLevelBar.style.width = `${levelPercent}%`;
-          if (levelPercent < 10) {
-            audioLevelBar.className = 'h-full bg-red-400 w-0 transition-all duration-200';
-            audioLevelText.textContent = `极低(${levelPercent}%)`;
-            audioLevelText.className = 'text-sm text-red-400 w-[60px] text-right';
-          } else if (levelPercent < 30) {
-            audioLevelBar.className = 'h-full bg-yellow-400 w-0 transition-all duration-200';
-            audioLevelText.textContent = `较低(${levelPercent}%)`;
-            audioLevelText.className = 'text-sm text-yellow-400 w-[60px] text-right';
-          } else {
-            audioLevelBar.className = 'h-full bg-green-400 w-0 transition-all duration-200';
-            audioLevelText.textContent = `正常(${levelPercent}%)`;
-            audioLevelText.className = 'text-sm text-green-400 w-[60px] text-right';
-          }
-          requestAnimationFrame(updateLevel);
-        }
-        updateLevel();
-      } catch (err) {
-        logError(`音频分析初始化失败：${err.message}`);
-      }
-    }
-
-    // 重置声音强度分析（彻底清理）
-    function resetAudioAnalysis() {
-      // 断开音频源连接（关键修复点）
-      if (source) {
-        source.disconnect();
-        source = null;
-      }
-      if (analyser) {
-        analyser.disconnect();
-        analyser = null;
-      }
-      // 关闭音频上下文
-      if (audioContext) {
-        audioContext.close().catch(err => logError(`关闭上下文失败：${err.message}`));
-        audioContext = null;
-      }
-      // 重置UI
-      audioLevelBar.style.width = '0%';
-      audioLevelText.textContent = '未检测';
-      audioLevelText.className = 'text-sm text-slate-400 w-[60px] text-right';
-    }
 
     // 复制链接
     copyBtn.addEventListener('click', async () => {
@@ -363,12 +277,11 @@
       errorLog.value = '';
     });
 
-    // 监听音频播放结束
+    // 播放结束自动更新状态
     audioPlayer.addEventListener('ended', () => {
       playBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
       stopBtn.disabled = true;
       isPlaying = false;
-      resetAudioAnalysis();
     });
   </script>
 </body>
