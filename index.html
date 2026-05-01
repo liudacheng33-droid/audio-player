@@ -51,7 +51,6 @@
           <input 
             type="text" 
             id="audioUrl" 
-            value="http://cld-games3store-g60-10021.s3v2.nie.netease.com/20251109/game_10021/cc_audio_server/f63954a5-fc4f-4768-9ba4-af78882b26af?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20251102T081635Z&X-Amz-SignedHeaders=host&X-Amz-Expires=604799&X-Amz-Credential=CWIA3R2W8DVABATD7EHD%2F20251102%2F%2Fs3%2Faws4_request&X-Amz-Signature=c34fd6b02a93b80bb4c873e2eca38182f4f09356619c2dba5f6c6209f6efa033" 
             class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50"
             placeholder="请输入音频链接"
           >
@@ -275,13 +274,6 @@
     // 清空日志
     clearLogBtn.addEventListener('click', () => {
       errorLog.value = '';
-    });
-
-    // 播放结束自动更新状态
-    audioPlayer.addEventListener('ended', () => {
-      playBtn.innerHTML = '<i class="fa fa-play text-2xl md:text-3xl"></i>';
-      stopBtn.disabled = true;
-      isPlaying = false;
     });
   </script>
 </body>
